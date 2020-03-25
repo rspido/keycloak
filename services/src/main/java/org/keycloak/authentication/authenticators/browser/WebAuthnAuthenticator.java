@@ -16,13 +16,16 @@
 
 package org.keycloak.authentication.authenticators.browser;
 
-import com.webauthn4j.data.WebAuthnAuthenticationContext;
+import com.webauthn4j.data.AuthenticationParameters;
+import com.webauthn4j.data.AuthenticationRequest;
 import com.webauthn4j.data.client.Origin;
 import com.webauthn4j.data.client.challenge.Challenge;
 import com.webauthn4j.data.client.challenge.DefaultChallenge;
 import com.webauthn4j.server.ServerProperty;
 import com.webauthn4j.util.exception.WebAuthnException;
+
 import org.jboss.logging.Logger;
+
 import org.keycloak.WebAuthnConstants;
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.AuthenticationFlowError;
@@ -76,8 +79,7 @@ public class WebAuthnAuthenticator implements Authenticator, CredentialValidator
         form.setAttribute(WebAuthnConstants.CHALLENGE, challengeValue);
 
         WebAuthnPolicy policy = getWebAuthnPolicy(context);
-        String rpId = policy.getRpId();
-        if (rpId == null || rpId.isEmpty()) rpId =  context.getUriInfo().getBaseUri().getHost();
+        String rpId = getRpID(context);
         form.setAttribute(WebAuthnConstants.RP_ID, rpId);
 
         UserModel user = context.getUser();
@@ -108,6 +110,13 @@ public class WebAuthnAuthenticator implements Authenticator, CredentialValidator
         return context.getRealm().getWebAuthnPolicy();
     }
 
+    protected String getRpID(AuthenticationFlowContext context){
+        WebAuthnPolicy policy = getWebAuthnPolicy(context);
+        String rpId = policy.getRpId();
+        if (rpId == null || rpId.isEmpty()) rpId = context.getUriInfo().getBaseUri().getHost();
+        return rpId;
+    }
+
     protected String getCredentialType() {
         return WebAuthnCredentialModel.TYPE_TWOFACTOR;
     }
@@ -126,7 +135,7 @@ public class WebAuthnAuthenticator implements Authenticator, CredentialValidator
         }
 
         String baseUrl = UriUtils.getOrigin(context.getUriInfo().getBaseUri());
-        String rpId = context.getUriInfo().getBaseUri().getHost();
+        String rpId = getRpID(context);
 
         Origin origin = new Origin(baseUrl);
         Challenge challenge = new DefaultChallenge(context.getAuthenticationSession().getAuthNote(WebAuthnConstants.AUTH_CHALLENGE_NOTE));
@@ -171,17 +180,24 @@ public class WebAuthnAuthenticator implements Authenticator, CredentialValidator
         if (WebAuthnConstants.OPTION_REQUIRED.equals(userVerificationRequirement)) isUVFlagChecked = true;
 
         UserModel user = session.users().getUserById(userId, context.getRealm());
-        WebAuthnAuthenticationContext authenticationContext = new WebAuthnAuthenticationContext(
+
+        AuthenticationRequest authenticationRequest = new AuthenticationRequest(
                 credentialId,
-                clientDataJSON,
                 authenticatorData,
-                signature,
+                clientDataJSON,
+                signature
+                );
+
+        AuthenticationParameters authenticationParameters = new AuthenticationParameters(
                 server,
+                null, // here authenticator cannot be fetched, set it afterwards in WebAuthnCredentialProvider.isValid()
                 isUVFlagChecked
-        );
+                );
 
         WebAuthnCredentialModelInput cred = new WebAuthnCredentialModelInput(getCredentialType());
-        cred.setAuthenticationContext(authenticationContext);
+
+        cred.setAuthenticationRequest(authenticationRequest);
+        cred.setAuthenticationParameters(authenticationParameters);
 
         boolean result = false;
         try {

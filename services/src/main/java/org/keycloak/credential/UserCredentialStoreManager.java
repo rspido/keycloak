@@ -60,16 +60,19 @@ public class UserCredentialStoreManager implements UserCredentialManager, OnUser
 
     @Override
     public void updateCredential(RealmModel realm, UserModel user, CredentialModel cred) {
+        throwExceptionIfInvalidUser(user);
         getStoreForUser(user).updateCredential(realm, user, cred);
     }
 
     @Override
     public CredentialModel createCredential(RealmModel realm, UserModel user, CredentialModel cred) {
+        throwExceptionIfInvalidUser(user);
         return getStoreForUser(user).createCredential(realm, user, cred);
     }
 
     @Override
     public boolean removeStoredCredential(RealmModel realm, UserModel user, String id) {
+        throwExceptionIfInvalidUser(user);
         boolean removalResult = getStoreForUser(user).removeStoredCredential(realm, user, id);
         session.userCache().evict(realm, user);
         return removalResult;
@@ -97,6 +100,7 @@ public class UserCredentialStoreManager implements UserCredentialManager, OnUser
 
     @Override
     public boolean moveCredentialTo(RealmModel realm, UserModel user, String id, String newPreviousCredentialId){
+        throwExceptionIfInvalidUser(user);
         return getStoreForUser(user).moveCredentialTo(realm, user, id, newPreviousCredentialId);
     }
 
@@ -107,6 +111,7 @@ public class UserCredentialStoreManager implements UserCredentialManager, OnUser
 
     @Override
     public CredentialModel createCredentialThroughProvider(RealmModel realm, UserModel user, CredentialModel model){
+        throwExceptionIfInvalidUser(user);
         List <CredentialProvider> credentialProviders = session.getKeycloakSessionFactory().getProviderFactories(CredentialProvider.class)
                 .stream()
                 .map(f -> session.getProvider(CredentialProvider.class, f.getId()))
@@ -121,6 +126,7 @@ public class UserCredentialStoreManager implements UserCredentialManager, OnUser
 
     @Override
     public void updateCredentialLabel(RealmModel realm, UserModel user, String credentialId, String userLabel){
+        throwExceptionIfInvalidUser(user);
         CredentialModel credential = getStoredCredentialById(realm, user, credentialId);
         credential.setUserLabel(userLabel);
         getStoreForUser(user).updateCredential(realm, user, credential);
@@ -132,7 +138,9 @@ public class UserCredentialStoreManager implements UserCredentialManager, OnUser
 
     @Override
     public boolean isValid(RealmModel realm, UserModel user, List<CredentialInput> inputs) {
-
+        if (!isValid(user)) {
+            return false;
+        }
         List<CredentialInput> toValidate = new LinkedList<>();
         toValidate.addAll(inputs);
         if (!StorageId.isLocalStorage(user)) {
@@ -190,24 +198,25 @@ public class UserCredentialStoreManager implements UserCredentialManager, OnUser
     }
 
     @Override
-    public void updateCredential(RealmModel realm, UserModel user, CredentialInput input) {
+    public boolean updateCredential(RealmModel realm, UserModel user, CredentialInput input) {
         if (!StorageId.isLocalStorage(user)) {
             String providerId = StorageId.resolveProviderId(user);
             UserStorageProvider provider = UserStorageManager.getStorageProvider(session, realm, providerId);
             if (provider instanceof CredentialInputUpdater) {
-                if (!UserStorageManager.isStorageProviderEnabled(realm, providerId)) return;
+                if (!UserStorageManager.isStorageProviderEnabled(realm, providerId)) return false;
                 CredentialInputUpdater updater = (CredentialInputUpdater) provider;
                 if (updater.supportsCredentialType(input.getType())) {
-                    if (updater.updateCredential(realm, user, input)) return;
+                    if (updater.updateCredential(realm, user, input)) return true;
                 }
 
             }
         } else {
+            throwExceptionIfInvalidUser(user);
             if (user.getFederationLink() != null) {
                 UserStorageProvider provider = UserStorageManager.getStorageProvider(session, realm, user.getFederationLink());
                 if (provider instanceof CredentialInputUpdater) {
-                    if (!UserStorageManager.isStorageProviderEnabled(realm, user.getFederationLink())) return;
-                    if (((CredentialInputUpdater) provider).updateCredential(realm, user, input)) return;
+                    if (!UserStorageManager.isStorageProviderEnabled(realm, user.getFederationLink())) return false;
+                    if (((CredentialInputUpdater) provider).updateCredential(realm, user, input)) return true;
                 }
             }
         }
@@ -215,9 +224,11 @@ public class UserCredentialStoreManager implements UserCredentialManager, OnUser
         List<CredentialInputUpdater> credentialProviders = getCredentialProviders(session, realm, CredentialInputUpdater.class);
         for (CredentialInputUpdater updater : credentialProviders) {
             if (!updater.supportsCredentialType(input.getType())) continue;
-            if (updater.updateCredential(realm, user, input)) return;
+            if (updater.updateCredential(realm, user, input)) return true;
 
         }
+
+        return false;
     }
 
     @Override
@@ -234,6 +245,7 @@ public class UserCredentialStoreManager implements UserCredentialManager, OnUser
 
             }
         } else {
+            throwExceptionIfInvalidUser(user);
             if (user.getFederationLink() != null) {
                 UserStorageProvider provider = UserStorageManager.getStorageProvider(session, realm, user.getFederationLink());
                 if (provider instanceof CredentialInputUpdater) {
@@ -383,5 +395,16 @@ public class UserCredentialStoreManager implements UserCredentialManager, OnUser
     @Override
     public void close() {
 
+    }
+
+    private boolean isValid(UserModel user) {
+        return user != null && user.getServiceAccountClientLink() == null;
+    }
+    
+    private void throwExceptionIfInvalidUser(UserModel user) {
+        if (user == null || isValid(user)) {
+            return;
+        }
+        throw new RuntimeException("You can not manage credentials for this user");
     }
 }

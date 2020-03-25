@@ -25,6 +25,7 @@ import org.keycloak.common.util.ObjectUtil;
 import org.keycloak.events.admin.OperationType;
 import org.keycloak.events.admin.ResourceType;
 import org.keycloak.models.Constants;
+import org.keycloak.models.FederatedIdentityModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.ModelDuplicateException;
 import org.keycloak.models.ModelException;
@@ -33,6 +34,7 @@ import org.keycloak.models.UserModel;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.models.utils.RepresentationToModel;
 import org.keycloak.policy.PasswordPolicyNotMetException;
+import org.keycloak.representations.idm.FederatedIdentityRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.services.ErrorResponse;
 import org.keycloak.services.ForbiddenException;
@@ -108,6 +110,9 @@ public class UsersResource {
         auth.users().requireManage();
 
         String username = rep.getUsername();
+        if(realm.isRegistrationEmailAsUsername()) {
+            username = rep.getEmail();
+        }
         if (ObjectUtil.isBlank(username)) {
             return ErrorResponse.error("User name is missing", Response.Status.BAD_REQUEST);
         }
@@ -125,6 +130,9 @@ public class UsersResource {
             Set<String> emptySet = Collections.emptySet();
 
             UserResource.updateUserFromRep(user, rep, emptySet, realm, session, false);
+            RepresentationToModel.createFederatedIdentities(rep, session, realm, user);
+            RepresentationToModel.createGroups(rep, realm, user);
+
             RepresentationToModel.createCredentials(rep, session, realm, user, true);
             adminEvent.operation(OperationType.CREATE).resourcePath(session.getContext().getUri(), user.getId()).representation(rep).success();
 
@@ -211,7 +219,9 @@ public class UsersResource {
                     userModels = Arrays.asList(userModel);
                 }
             } else {
-                userModels = session.users().searchForUser(search.trim(), realm, firstResult, maxResults);
+                Map<String, String> attributes = new HashMap<>();
+                attributes.put(UserModel.SEARCH, search.trim());
+                return searchForUser(attributes, realm, userPermissionEvaluator, briefRepresentation, firstResult, maxResults, false);
             }
         } else if (last != null || first != null || email != null || username != null) {
             Map<String, String> attributes = new HashMap<>();

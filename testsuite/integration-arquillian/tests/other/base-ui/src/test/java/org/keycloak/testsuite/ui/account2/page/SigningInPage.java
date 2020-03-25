@@ -112,19 +112,7 @@ public class SigningInPage extends AbstractLoggedInPage {
         }
 
         public void clickSetUpLink() {
-            clickSetUpLink(false);
-        }
-
-        public void clickSetUpLink(boolean skipWaits) {
-            WebElement element = getItemElement(SET_UP);
-            if (skipWaits) {
-                // this is for the very special case of registering webauthn; chromedriver doesn't seem to like requesting
-                // getCurrentUrl during security key registration
-                element.click();
-            }
-            else {
-                clickLink(element);
-            }
+            clickLink(getItemElement(SET_UP));
         }
 
         public boolean isSetUpLinkVisible() {
@@ -190,6 +178,15 @@ public class SigningInPage extends AbstractLoggedInPage {
 
         public String getUserLabel() {
             return getTextFromItem(LABEL);
+        }
+
+        public boolean hasCreatedAt() {
+            boolean result = false;
+            try {
+                result = getItemElement(CREATED_AT).isDisplayed();
+            } catch (NoSuchElementException e) {}
+
+            return result;
         }
 
         public String getCreatedAtStr() {

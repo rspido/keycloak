@@ -379,6 +379,7 @@ module.controller('UserDetailCtrl', function($scope, realm, user, BruteForceUser
     $scope.realm = realm;
     $scope.create = !user.id;
     $scope.editUsername = $scope.create || $scope.realm.editUsernameAllowed;
+    $scope.emailAsUsername = $scope.realm.registrationEmailAsUsername;
 
     if ($scope.create) {
         $scope.user = { enabled: true, attributes: {} }
@@ -1660,20 +1661,19 @@ module.controller('LDAPUserStorageCtrl', function($scope, $location, Notificatio
     var initConnectionTest = function(testAction, ldapConfig) {
         return {
             action: testAction,
-            realm: $scope.realm.realm,
-            connectionUrl: ldapConfig.connectionUrl,
-            bindDn: ldapConfig.bindDn,
-            bindCredential: ldapConfig.bindCredential,
-            useTruststoreSpi: ldapConfig.useTruststoreSpi,
-            connectionTimeout: ldapConfig.connectionTimeout,
-            startTls: ldapConfig.startTls,
+            connectionUrl: ldapConfig.connectionUrl && ldapConfig.connectionUrl[0],
+            bindDn: ldapConfig.bindDn && ldapConfig.bindDn[0],
+            bindCredential: ldapConfig.bindCredential && ldapConfig.bindCredential[0],
+            useTruststoreSpi: ldapConfig.useTruststoreSpi && ldapConfig.useTruststoreSpi[0],
+            connectionTimeout: ldapConfig.connectionTimeout && ldapConfig.connectionTimeout[0],
+            startTls: ldapConfig.startTls && ldapConfig.startTls[0],
             componentId: instance.id
         };
     };
 
     $scope.testConnection = function() {
         console.log('LDAPCtrl: testConnection');
-        RealmLDAPConnectionTester.save(initConnectionTest("testConnection", $scope.instance.config), function() {
+        RealmLDAPConnectionTester.save({realm: realm.realm}, initConnectionTest("testConnection", $scope.instance.config), function() {
             Notifications.success("LDAP connection successful.");
         }, function() {
             Notifications.error("Error when trying to connect to LDAP. See server.log for details.");
@@ -1682,7 +1682,7 @@ module.controller('LDAPUserStorageCtrl', function($scope, $location, Notificatio
 
     $scope.testAuthentication = function() {
         console.log('LDAPCtrl: testAuthentication');
-        RealmLDAPConnectionTester.save(initConnectionTest("testAuthentication", $scope.instance.config), function() {
+        RealmLDAPConnectionTester.save({realm: realm.realm}, initConnectionTest("testAuthentication", $scope.instance.config), function() {
             Notifications.success("LDAP authentication successful.");
         }, function() {
             Notifications.error("LDAP authentication failed. See server.log for details");

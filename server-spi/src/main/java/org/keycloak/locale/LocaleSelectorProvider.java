@@ -16,12 +16,10 @@
  */
 package org.keycloak.locale;
 
-
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.provider.Provider;
 
-import javax.ws.rs.core.UriInfo;
 import java.util.Locale;
 
 public interface LocaleSelectorProvider extends Provider {
@@ -34,16 +32,9 @@ public interface LocaleSelectorProvider extends Provider {
 
     /**
      * Resolve the locale which should be used for the request
-     *
      * @param user
      * @return
      */
-    Locale resolveLocale(UserModel user);
-
-    void updateUsersLocale(UserModel user, String locale);
-
-    void updateLocaleCookie(RealmModel realm, String locale, UriInfo uriInfo);
-
-    void expireLocaleCookie(RealmModel realm, UriInfo uriInfo);
+    Locale resolveLocale(RealmModel realm, UserModel user);
 
 }

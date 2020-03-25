@@ -40,6 +40,7 @@ import org.keycloak.forms.account.AccountPages;
 import org.keycloak.forms.account.AccountProvider;
 import org.keycloak.forms.login.LoginFormsProvider;
 import org.keycloak.locale.LocaleSelectorProvider;
+import org.keycloak.locale.LocaleUpdaterProvider;
 import org.keycloak.models.AccountRoles;
 import org.keycloak.models.AuthenticatedClientSessionModel;
 import org.keycloak.models.ClientModel;
@@ -76,6 +77,7 @@ import org.keycloak.services.validation.Validation;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.storage.ReadOnlyException;
 import org.keycloak.util.JsonSerialization;
+import org.keycloak.utils.CredentialHelper;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.FormParam;
@@ -225,8 +227,8 @@ public class AccountFormService extends AbstractSecuredLocalService {
 
             String locale = session.getContext().getUri().getQueryParameters().getFirst(LocaleSelectorProvider.KC_LOCALE_PARAM);
             if (locale != null) {
-                LocaleSelectorProvider localeSelectorProvider = session.getProvider(LocaleSelectorProvider.class);
-                localeSelectorProvider.updateUsersLocale(auth.getUser(), locale);
+                LocaleUpdaterProvider updater = session.getProvider(LocaleUpdaterProvider.class);
+                updater.updateUsersLocale(auth.getUser(), locale);
             }
 
             return account.createResponse(page);
@@ -293,7 +295,7 @@ public class AccountFormService extends AbstractSecuredLocalService {
         }
 
         if (auth != null) {
-            List<Event> events = eventStore.createQuery().type(Constants.EXPOSED_LOG_EVENTS).user(auth.getUser().getId()).maxResults(30).getResultList();
+            List<Event> events = eventStore.createQuery().type(Constants.EXPOSED_LOG_EVENTS).realm(auth.getRealm().getId()).user(auth.getUser().getId()).maxResults(30).getResultList();
             for (Event e : events) {
                 if (e.getDetails() != null) {
                     Iterator<Map.Entry<String, String>> itr = e.getDetails().entrySet().iterator();
@@ -493,14 +495,13 @@ public class AccountFormService extends AbstractSecuredLocalService {
 
         UserModel user = auth.getUser();
 
-        OTPCredentialProvider otpCredentialProvider = (OTPCredentialProvider) session.getProvider(CredentialProvider.class, "keycloak-otp");
         if (action != null && action.equals("Delete")) {
             String credentialId = formData.getFirst("credentialId");
             if (credentialId == null) {
                 setReferrerOnPage();
                 return account.setError(Status.OK, Messages.UNEXPECTED_ERROR_HANDLING_REQUEST).createResponse(AccountPages.TOTP);
             }
-            otpCredentialProvider.deleteCredential(realm, user, credentialId);
+            CredentialHelper.deleteOTPCredential(session, realm, user, credentialId);
             event.event(EventType.REMOVE_TOTP).client(auth.getClient()).user(auth.getUser()).success();
             setReferrerOnPage();
             return account.setSuccess(Messages.SUCCESS_TOTP_REMOVED).createResponse(AccountPages.TOTP);
@@ -519,10 +520,7 @@ public class AccountFormService extends AbstractSecuredLocalService {
                 return account.setError(Status.OK, Messages.INVALID_TOTP).createResponse(AccountPages.TOTP);
             }
 
-
-            CredentialModel createdCredential = otpCredentialProvider.createCredential(realm, user, credentialModel);
-            UserCredentialModel credential = new UserCredentialModel(createdCredential.getId(), otpCredentialProvider.getType(), challengeResponse);
-            if (!otpCredentialProvider.isValid(realm, user, credential)) {
+            if (!CredentialHelper.createOTPCredential(session, realm, user, challengeResponse, credentialModel)) {
                 setReferrerOnPage();
                 return account.setError(Status.OK, Messages.INVALID_TOTP).createResponse(AccountPages.TOTP);
             }

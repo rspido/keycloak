@@ -830,7 +830,7 @@ public class RealmCacheSession implements CacheRealmProvider {
     @Override
     public void moveGroup(RealmModel realm, GroupModel group, GroupModel toParent) {
         invalidateGroup(group.getId(), realm.getId(), true);
-        if (toParent != null) invalidateGroup(group.getId(), realm.getId(), false); // Queries already invalidated
+        if (toParent != null) invalidateGroup(toParent.getId(), realm.getId(), false); // Queries already invalidated
         listInvalidations.add(realm.getId());
 
         invalidationEvents.add(GroupMovedEvent.create(group, toParent, realm.getId()));
@@ -993,24 +993,19 @@ public class RealmCacheSession implements CacheRealmProvider {
         return getRealmDelegate().removeGroup(realm, group);
     }
 
-    @Override
-    public GroupModel createGroup(RealmModel realm, String name) {
-        GroupModel group = getRealmDelegate().createGroup(realm, name);
-        return groupAdded(realm, group);
-    }
-
-    private GroupModel groupAdded(RealmModel realm, GroupModel group) {
+    private GroupModel groupAdded(RealmModel realm, GroupModel group, GroupModel toParent) {
         listInvalidations.add(realm.getId());
-        cache.groupQueriesInvalidations(realm.getId(), invalidations);
-        invalidations.add(group.getId());
-        invalidationEvents.add(GroupAddedEvent.create(group.getId(), realm.getId()));
+        invalidateGroup(group.getId(), realm.getId(), true);
+        if (toParent != null) invalidateGroup(toParent.getId(), realm.getId(), false); // Queries already invalidated
+        String parentId = toParent == null ? null : toParent.getId();
+        invalidationEvents.add(GroupAddedEvent.create(group.getId(), parentId, realm.getId()));
         return group;
     }
 
     @Override
-    public GroupModel createGroup(RealmModel realm, String id, String name) {
-        GroupModel group = getRealmDelegate().createGroup(realm, id, name);
-        return groupAdded(realm, group);
+    public GroupModel createGroup(RealmModel realm, String id, String name, GroupModel toParent) {
+        GroupModel group = getRealmDelegate().createGroup(realm, id, name, toParent);
+        return groupAdded(realm, group, toParent);
     }
 
     @Override
